@@ -1,0 +1,37 @@
+{"properties": [
+  {
+    "name": "app.aws-profile",
+    "type": "java.lang.String",
+    "description": "Local AWS profile to connect to S3"
+  },
+  {
+    "name": "app.aws-s3-bucket-name",
+    "type": "java.lang.String",
+    "description": "AWS S3 bucket name"
+  },
+  {
+    "name": "app.total-temporal-files",
+    "type": "java.lang.String",
+    "description": "Amount of temporal files to be uploaded to S3 "
+  },
+  {
+    "name": "app.max-concurrent-uploads",
+    "type": "java.lang.String",
+    "description": "Maximum concurrent uploads to S3"
+  },
+  {
+    "name": "app.http-max-connections",
+    "type": "java.lang.String",
+    "description": "Maximum HTTP connections to S3 API"
+  },
+  {
+    "name": "app.http-connection-timeout",
+    "type": "java.lang.String",
+    "description": "Timeout for HTTP connections"
+  },
+  {
+    "name": "app.http-connection-aquisition-timeout",
+    "type": "java.lang.String",
+    "description": "Timout for HTTP connections to be acquired"
+  }
+]}
