@@ -1,0 +1,2 @@
+# This file ensures the files-downloaded directory is tracked by Git
+# All other files in this directory will be ignored as per .gitignore rules

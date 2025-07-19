@@ -1,5 +1,7 @@
 package com.example.demo_s3_upload_concurrent;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -9,17 +11,20 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.apache.ApacheHttpClient;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 
-public class S3VirtualThreadUploader {
+public class S3FileManager {
     private final S3Client s3Client;
     private final String bucketName;
     private final Semaphore semaphore;
 
-    public S3VirtualThreadUploader(AppConfig appConfig) {
+    public S3FileManager(AppConfig appConfig) {
         ProfileCredentialsProvider credentialsProvider = ProfileCredentialsProvider.builder()
                 .profileName(appConfig.getAwsProfile())
                 .build();
@@ -76,6 +81,65 @@ public class S3VirtualThreadUploader {
                     (endTime - startTime));
         } catch (Exception e) {
             System.err.printf("Error uploading file %s: %s%n", filePath.getFileName(), e.getMessage());
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void downloadFilesConcurrently(List<String> s3Keys, Path downloadDirectory) {
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            // Create download directory if it doesn't exist
+            if (!Files.exists(downloadDirectory)) {
+                Files.createDirectories(downloadDirectory);
+            }
+
+            List<CompletableFuture<Void>> downloadFutures = s3Keys.stream()
+                    .map(s3Key -> CompletableFuture.runAsync(() -> {
+                        try {
+                            semaphore.acquire();
+                            try {
+                                downloadFile(s3Key, downloadDirectory);
+                            } finally {
+                                semaphore.release();
+                            }
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            throw new RuntimeException("Download interrupted", e);
+                        } catch (IOException e) {
+                            throw new RuntimeException("Download failed", e);
+                        }
+                    }, executor))
+                    .toList();
+
+            CompletableFuture.allOf(downloadFutures.toArray(new CompletableFuture[0])).join();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to create download directory", e);
+        }
+    }
+
+    private void downloadFile(String s3Key, Path downloadDirectory) throws IOException {
+        try {
+            GetObjectRequest request = GetObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(s3Key)
+                    .build();
+
+            long startTime = System.currentTimeMillis();
+
+            Path downloadPath = downloadDirectory.resolve(s3Key);
+
+            try (ResponseInputStream<GetObjectResponse> s3Object = s3Client.getObject(request)) {
+                Files.copy(s3Object, downloadPath);
+            }
+
+            long endTime = System.currentTimeMillis();
+            System.out.printf("Thread-%d (Available Permits: %d): Successfully downloaded %s from bucket %s in %d ms%n",
+                    Thread.currentThread().threadId(),
+                    semaphore.availablePermits(),
+                    s3Key,
+                    bucketName,
+                    (endTime - startTime));
+        } catch (Exception e) {
+            System.err.printf("Error downloading file %s: %s%n", s3Key, e.getMessage());
             throw new RuntimeException(e);
         }
     }

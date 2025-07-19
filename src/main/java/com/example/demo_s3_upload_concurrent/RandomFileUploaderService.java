@@ -19,9 +19,10 @@ public class RandomFileUploaderService {
         this.appConfig = appConfig;
     }
 
-    public void uploadFilesFromDirectory(String directory) {
+    public List<String> uploadFilesFromDirectory(String directory) {
         Path tempDir = null;
-        S3VirtualThreadUploader uploader = new S3VirtualThreadUploader(this.appConfig);
+        S3FileManager fileManager = new S3FileManager(this.appConfig);
+        List<String> uploadedFileNames = new ArrayList<>();
 
         try {
             // Create temporary directory for files
@@ -33,18 +34,48 @@ public class RandomFileUploaderService {
                     Integer.parseInt(this.appConfig.getTotalTemporalFiles()));
 
             long startTime = System.currentTimeMillis();
-            uploader.uploadFilesConcurrently(filesToUpload);
+            fileManager.uploadFilesConcurrently(filesToUpload);
             long endTime = System.currentTimeMillis();
+
+            // Collect the file names (keys) that were uploaded to S3
+            uploadedFileNames = filesToUpload.stream()
+                    .map(path -> path.getFileName().toString())
+                    .toList();
 
             System.out.printf("Uploaded %d files in %d ms%n", filesToUpload.size(), (endTime - startTime));
         } catch (Exception e) {
             System.err.println("Error during batch upload: " + e.getMessage());
             e.printStackTrace();
         } finally {
-            uploader.cleanUp();
+            fileManager.cleanUp();
             if (tempDir != null) {
                 deleteDirectory(tempDir);
             }
+        }
+
+        return uploadedFileNames;
+    }
+
+    public void downloadFilesFromS3(List<String> s3Keys, String downloadDirectoryName) {
+        S3FileManager fileManager = new S3FileManager(this.appConfig);
+
+        try {
+            // Create download directory
+            Path downloadDir = Path.of(downloadDirectoryName);
+            if (!Files.exists(downloadDir)) {
+                Files.createDirectories(downloadDir);
+            }
+
+            long startTime = System.currentTimeMillis();
+            fileManager.downloadFilesConcurrently(s3Keys, downloadDir);
+            long endTime = System.currentTimeMillis();
+
+            System.out.printf("Downloaded %d files in %d ms%n", s3Keys.size(), (endTime - startTime));
+        } catch (Exception e) {
+            System.err.println("Error during batch download: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            fileManager.cleanUp();
         }
     }
 

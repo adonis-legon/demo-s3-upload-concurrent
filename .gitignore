@@ -31,3 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
+.env
+
+### Downloaded Files ###
+files-downloaded/*
+!files-downloaded/.gitkeep
